@@ -23,6 +23,8 @@ jobs:
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
+    # HACS reads the repo anonymously, so it can only validate public repos.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
