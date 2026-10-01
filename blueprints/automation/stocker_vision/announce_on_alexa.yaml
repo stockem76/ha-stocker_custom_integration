@@ -1,0 +1,76 @@
+blueprint:
+  name: Stocker Vision - announce visitors on Alexa
+  description: >
+    Announces people and vehicles recognised by Stocker Vision on Echo devices,
+    using Alexa Media Player. The wording already reflects confidence
+    ("I think Mark is at the front door").
+  domain: automation
+  input:
+    echo_devices:
+      name: Echo devices
+      selector:
+        entity:
+          integration: alexamedia
+          domain: media_player
+          multiple: true
+    levels:
+      name: Announce these confidence levels
+      default: [certain, likely, unknown]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Certain match
+              value: certain
+            - label: Likely match ("I think…")
+              value: likely
+            - label: Unrecognised person or plate
+              value: unknown
+    cameras:
+      name: Only these Frigate cameras (leave empty for all)
+      default: []
+      selector:
+        text:
+          multiple: true
+    quiet_start:
+      name: Quiet hours start
+      default: "22:30:00"
+      selector:
+        time: {}
+    quiet_end:
+      name: Quiet hours end
+      default: "07:00:00"
+      selector:
+        time: {}
+
+mode: queued
+max: 5
+
+trigger:
+  - platform: event
+    event_type: stocker_vision_visitor
+  - platform: event
+    event_type: stocker_vision_vehicle
+
+variables:
+  levels: !input levels
+  cameras: !input cameras
+
+condition:
+  - condition: template
+    value_template: "{{ trigger.event.data.level in levels }}"
+  - condition: template
+    value_template: "{{ cameras | length == 0 or trigger.event.data.camera in cameras }}"
+  - condition: not
+    conditions:
+      - condition: time
+        after: !input quiet_start
+        before: !input quiet_end
+
+action:
+  - service: notify.alexa_media
+    data:
+      message: "{{ trigger.event.data.message }}"
+      target: !input echo_devices
+      data:
+        type: announce

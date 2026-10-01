@@ -1,10 +1,12 @@
 {
   "domain": "stocker_custom_integration",
-  "name": "Stocker Custom Integration",
+  "name": "Stocker Vision",
   "codeowners": [],
   "config_flow": true,
+  "dependencies": ["mqtt"],
   "documentation": "https://github.com/OWNER/ha-stocker_custom_integration",
-  "iot_class": "local_polling",
+  "integration_type": "service",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/OWNER/ha-stocker_custom_integration/issues",
   "requirements": [],
   "version": "0.1.0"

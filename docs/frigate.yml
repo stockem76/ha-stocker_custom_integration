@@ -1,0 +1,129 @@
+# Frigate config template for a NUC5i5RYK (i5-5250U, HD 6000) running HAOS.
+# Copy into the Frigate add-on's config (/addon_configs/ccab4aaf_frigate/config.yml)
+# and replace every <PLACEHOLDER>. Check keys against the docs for your Frigate
+# version (written for 0.16): https://docs.frigate.video/configuration/reference
+#
+# Hardware notes
+# - 5th-gen Intel: OpenVINO runs on the CPU only (GPU plugin needs 6th gen+).
+#   Detection costs roughly 20-40 ms per frame, so keep detect fps low.
+# - Video decode uses VA-API with the legacy i965 driver.
+# - A Google Coral USB (~£60) would take detection off the CPU and leave far more
+#   room for the Stocker Vision add-on later. Strongly recommended.
+
+mqtt:
+  enabled: true
+  host: core-mosquitto
+  user: <MQTT_USER>
+  password: <MQTT_PASSWORD>
+
+environment_vars:
+  LIBVA_DRIVER_NAME: i965
+
+ffmpeg:
+  hwaccel_args: preset-vaapi
+
+detectors:
+  ov:
+    type: openvino
+    device: CPU
+
+model:
+  width: 300
+  height: 300
+  input_tensor: nhwc
+  input_pixel_format: bgr
+  path: /openvino-model/ssdlite_mobilenet_v2.xml
+  labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+
+objects:
+  track: [person, car, motorcycle, bicycle, dog, cat]
+
+face_recognition:
+  enabled: true
+  model_size: small        # "large" needs a GPU; small runs on the CPU
+  # recognition_threshold / min_area can be tuned once you have a face library
+
+lpr:
+  enabled: true
+  # Map plates to names so Stocker Vision can announce "Sarah's car".
+  # UK plates: allow for the space and common OCR confusions (O/0, I/1).
+  known_plates:
+    "<Sarah's car>":
+      - "<AB12CDE>"
+
+record:
+  enabled: true
+  retain:
+    days: 3
+    mode: motion
+  alerts:
+    retain:
+      days: 14
+  detections:
+    retain:
+      days: 14
+
+snapshots:
+  enabled: true
+  retain:
+    default: 14
+
+go2rtc:
+  streams:
+    # D235 must be hardwired, jumper fitted, Always-On mode enabled.
+    # Credentials are the "camera account" created in the Tapo app.
+    front_door:
+      - rtsp://<TAPO_USER>:<TAPO_PASS>@<D235_IP>:554/stream1
+    front_door_sub:
+      - rtsp://<TAPO_USER>:<TAPO_PASS>@<D235_IP>:554/stream2
+    driveway:
+      - rtsp://<TAPO_USER>:<TAPO_PASS>@<C500_1_IP>:554/stream1
+    driveway_sub:
+      - rtsp://<TAPO_USER>:<TAPO_PASS>@<C500_1_IP>:554/stream2
+    # Add more C500s the same way.
+
+cameras:
+  front_door:
+    ffmpeg:
+      inputs:
+        # Faces need pixels: detect on the main stream, scaled down, at low fps.
+        - path: rtsp://127.0.0.1:8554/front_door
+          input_args: preset-rtsp-restream
+          roles: [detect, record]
+    detect:
+      width: 1280
+      height: 960   # match the D235's aspect ratio
+      fps: 5
+    objects:
+      track: [person]
+    zones:
+      approach:
+        # Draw this in the Frigate UI: the path and step, not the street.
+        coordinates: <ZONE_COORDS>
+    review:
+      alerts:
+        required_zones: [approach]
+
+  driveway:
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/driveway_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        - path: rtsp://127.0.0.1:8554/driveway
+          input_args: preset-rtsp-restream
+          roles: [record]
+    detect:
+      width: 640
+      height: 360
+      fps: 5
+    objects:
+      track: [person, car, motorcycle]
+    lpr:
+      enabled: true
+    zones:
+      drive:
+        coordinates: <ZONE_COORDS>
+    review:
+      alerts:
+        required_zones: [drive]

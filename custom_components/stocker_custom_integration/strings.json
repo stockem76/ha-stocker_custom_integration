@@ -2,20 +2,51 @@
   "config": {
     "step": {
       "user": {
-        "title": "Set up Stocker Custom Integration",
+        "title": "Set up Stocker Vision",
+        "description": "Listens to Frigate face and number plate recognition over MQTT.",
         "data": {
-          "name": "Name"
+          "topic_prefix": "Frigate MQTT topic prefix"
         }
       }
     },
     "abort": {
-      "already_configured": "This entry is already configured."
+      "already_configured": "This Frigate topic prefix is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Recognition settings",
+        "data": {
+          "certain_threshold": "Certain at or above",
+          "likely_threshold": "Likely at or above (announced as \"I think…\")",
+          "cooldown": "Don't re-announce the same subject within",
+          "unknown_delay": "Wait this long for a face before announcing an unknown person",
+          "unknown_cameras": "Cameras that announce unknown people (comma separated Frigate names, blank = all)",
+          "announce_unknown_vehicles": "Announce unrecognised number plates",
+          "presence_minutes": "Keep \"seen\" sensors on for"
+        }
+      }
+    },
+    "error": {
+      "thresholds_order": "The likely threshold must not be higher than the certain threshold."
     }
   },
   "entity": {
     "sensor": {
-      "status": {
-        "name": "Status"
+      "last_visitor": {
+        "name": "Last visitor"
+      },
+      "last_vehicle": {
+        "name": "Last vehicle"
+      }
+    },
+    "binary_sensor": {
+      "person_seen": {
+        "name": "{name} seen"
+      },
+      "vehicle_seen": {
+        "name": "{name} vehicle seen"
       }
     }
   }

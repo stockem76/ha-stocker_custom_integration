@@ -60,6 +60,18 @@ Triggered by Frigate `person` and `car` events, so the expensive models run only
 - Services: `create_person`, `assign_cluster`, `merge_persons`, `forget_person` (deletes all templates).
 - Blueprint: an announce automation with confidence-aware wording ("I think it's Mark", "That's Mark", "Someone I don't recognise").
 
+### 2.4 Hardware: NUC5i5RYK
+
+i5-5250U (2 cores, 4 threads, AVX2) and HD Graphics 6000 (Broadwell). Consequences:
+- **No iGPU inference.** OpenVINO's GPU plugin needs a 6th-gen chip or newer. Frigate detection, face and LPR all run on OpenVINO **CPU**, with Frigate's `small` face/LPR models.
+- Video decode still uses VA-API (`i965` driver). Detect on substreams at 5 fps. The doorbell detects on the main stream scaled to 1280×960 so faces have enough pixels.
+- **No local VLM.** The Ollama fallback in 2.2 is dropped. Role and vehicle classification use CLIP ViT-B/32-class models (about 150 ms per crop on this CPU), run on a few best frames per event only.
+- Pose estimation uses YOLO11n-pose or RTMPose-t only (about 50–100 ms per frame on the CPU), run only on frames from person tracks on the gait cameras.
+- **Recommended upgrade:** a Google Coral USB for Frigate detection. It frees most of the CPU for the Stocker Vision add-on.
+- RAM: 8 GB minimum, 16 GB preferred.
+
+Template config: [frigate.yml](frigate.yml).
+
 ## 3. Standards alignment
 
 | Area | Standard | How it's used |
