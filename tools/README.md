@@ -13,3 +13,7 @@ Helpers for seeding Frigate's Face Library from photos you already have. These t
 4. **Review the contact sheets**, delete any bad crops, then upload the result to Frigate.
 
 Keep `ROOT` outside this repository: it holds biometric data.
+
+## Auditing an existing library
+
+`python audit_face_library.py --frigate http://HOST:5000 ROOT` backs up every image under each face name to `ROOT/library-backup/`. It then scores each image (size, sharpness, Frigate's own recognition of a padded crop, and near-duplicates) and writes `ROOT/audit/report.json` plus review sheets. It never deletes anything. Review the sheets, then remove the images you agree with using Frigate's `POST /api/faces/<name>/delete {"ids": [...]}`. Expect correct photos of look-alike relatives to be flagged as "confused": keep those.
