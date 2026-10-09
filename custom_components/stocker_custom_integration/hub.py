@@ -175,6 +175,11 @@ class StockerHub:
                 )
         elif label in VEHICLE_LABELS:
             self.recognizer.track_started(track_id, camera, vehicle=True)
+            self._publish(
+                self.recognizer.vehicle_update(
+                    track_id, camera, after.get("box"), bool(after.get("stationary"))
+                )
+            )
             plate = after.get("recognized_license_plate")
             if sub_name or plate:
                 score = after.get("recognized_license_plate_score") or sub_score

@@ -21,10 +21,18 @@ class FakeClock:
         return self.now
 
 
-def make(clock: FakeClock | None = None):
+def make(clock: FakeClock | None = None, require_arrival: bool = True):
     return rec.Recognizer(
-        certain_threshold=0.9, likely_threshold=0.75, cooldown=120, clock=clock or FakeClock()
+        certain_threshold=0.9,
+        likely_threshold=0.75,
+        cooldown=120,
+        vehicles_require_arrival=require_arrival,
+        clock=clock or FakeClock(),
     )
+
+
+PARKED = [100, 100, 300, 250]
+APPROACHING = [140, 120, 380, 300]
 
 
 def test_certain_face_announced_once_per_track():
@@ -79,7 +87,7 @@ def test_unknown_person_ignored_after_track_end():
 
 
 def test_known_plate_announced():
-    r = make()
+    r = make(require_arrival=False)
     s = r.plate("v1", "driveway", "Sarah's car", "AB12CDE", 0.92, 1.0)
     assert s.kind == rec.KIND_VEHICLE
     assert s.plate == "AB12CDE"
@@ -87,7 +95,7 @@ def test_known_plate_announced():
 
 
 def test_unknown_plate_only_when_enabled():
-    r = make()
+    r = make(require_arrival=False)
     assert r.plate("v1", "driveway", None, "AB12CDE", 0.9, 1.0) is None
     s = r.plate("v2", "driveway", None, "AB12CDE", 0.9, 1.0, announce_unknown=True)
     assert s.kind == rec.KIND_UNKNOWN_VEHICLE and s.subject == "AB12CDE"
@@ -98,3 +106,52 @@ def test_confidence_level_boundaries():
     assert rec.confidence_level(0.9, 0.9, 0.75) == rec.LEVEL_CERTAIN
     assert rec.confidence_level(0.75, 0.9, 0.75) == rec.LEVEL_LIKELY
     assert rec.confidence_level(0.74, 0.9, 0.75) == rec.LEVEL_POSSIBLE
+
+
+def test_parked_car_never_announced():
+    """Frigate restarts and re-detects a car already on the drive."""
+    r = make()
+    assert r.vehicle_update("v1", "driveway", PARKED, stationary=False) is None
+    assert r.plate("v1", "driveway", "Matt's A1", "RE61ZXB", 0.97, 1.0) is None
+    assert r.vehicle_update("v1", "driveway", PARKED, stationary=True) is None
+    assert r.vehicle_update("v1", "driveway", APPROACHING, stationary=False) is None
+
+
+def test_arriving_car_announced_when_plate_read_after_movement():
+    r = make()
+    r.vehicle_update("v1", "driveway", PARKED, stationary=False)
+    assert r.vehicle_update("v1", "driveway", APPROACHING, stationary=False) is None
+    s = r.plate("v1", "driveway", "Ben's Yaris", "LM62NJG", 0.92, 2.0)
+    assert s.kind == rec.KIND_VEHICLE and s.name == "Ben's Yaris"
+
+
+def test_arriving_car_announced_when_plate_read_before_movement():
+    r = make()
+    r.vehicle_update("v1", "driveway", PARKED, stationary=False)
+    assert r.plate("v1", "driveway", "Ben's Yaris", "LM62NJG", 0.92, 1.0) is None
+    s = r.vehicle_update("v1", "driveway", APPROACHING, stationary=True)
+    assert s is not None and s.name == "Ben's Yaris"
+    assert r.vehicle_update("v1", "driveway", PARKED, stationary=False) is None
+
+
+def test_small_jitter_is_not_movement():
+    r = make()
+    r.vehicle_update("v1", "driveway", PARKED, stationary=False)
+    r.plate("v1", "driveway", "Matt's A1", "RE61ZXB", 0.97, 1.0)
+    assert r.vehicle_update("v1", "driveway", [104, 102, 305, 252], stationary=False) is None
+    assert r.vehicle_update("v1", "driveway", [104, 102, 305, 252], stationary=True) is None
+
+
+def test_named_plate_beats_unknown_plate_while_pending():
+    r = make()
+    r.vehicle_update("v1", "driveway", PARKED, stationary=False)
+    r.plate("v1", "driveway", "Ben's Yaris", "LM62NJG", 0.92, 1.0)
+    r.plate("v1", "driveway", None, "LM62NJG", 0.95, 1.5, announce_unknown=True)
+    s = r.vehicle_update("v1", "driveway", APPROACHING, stationary=False)
+    assert s.kind == rec.KIND_VEHICLE and s.name == "Ben's Yaris"
+
+
+def test_moved_detects_shift_and_resize():
+    assert rec._moved((0, 0, 100, 100), (30, 0, 130, 100))
+    assert rec._moved((0, 0, 100, 100), (0, 0, 130, 130))
+    assert not rec._moved((0, 0, 100, 100), (5, 5, 105, 105))

@@ -49,6 +49,8 @@ Import the blueprint [blueprints/automation/stocker_vision/announce_on_alexa.yam
 | Announce unknown plates | off | Read out unrecognised registrations |
 | Presence window | 10 min | How long the `*_seen` sensors stay on |
 
+Vehicles are only announced when they **arrive**, meaning Frigate sees them move before they become stationary. Cars already parked when Frigate starts, and cars driving away, are not announced.
+
 ## Privacy
 
 Face and gait templates are biometric data. Only enrol people who have agreed. Keep Frigate retention short, and use zones so the street isn't analysed. See DESIGN.md §5.

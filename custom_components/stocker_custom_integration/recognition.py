@@ -55,6 +55,20 @@ class _Track:
     best_score: float = 0.0
     announced: bool = False
     is_vehicle: bool = False
+    # Vehicles: announce only cars that arrive, not ones parked or leaving.
+    first_box: tuple[float, float, float, float] | None = None
+    arrived: bool | None = None  # None until movement or stationarity is seen
+    pending: Sighting | None = None
+
+
+def _moved(a: tuple[float, ...], b: tuple[float, ...], fraction: float = 0.2) -> bool:
+    """True if box b has shifted or resized noticeably relative to box a (x1, y1, x2, y2)."""
+    aw, ah, bw, bh = a[2] - a[0], a[3] - a[1], b[2] - b[0], b[3] - b[1]
+    size = max(aw, ah, 1.0)
+    dx = (b[0] + b[2]) / 2 - (a[0] + a[2]) / 2
+    dy = (b[1] + b[3]) / 2 - (a[1] + a[3]) / 2
+    area_ratio = (bw * bh) / max(aw * ah, 1.0)
+    return (dx * dx + dy * dy) ** 0.5 > fraction * size or not 0.7 <= area_ratio <= 1.43
 
 
 def humanize_camera(camera: str) -> str:
@@ -96,6 +110,7 @@ class Recognizer:
     certain_threshold: float = 0.9
     likely_threshold: float = 0.75
     cooldown: float = 120.0
+    vehicles_require_arrival: bool = True
     clock: Callable[[], float] = time.monotonic
     _tracks: dict[str, _Track] = field(default_factory=dict)
     _last_announced: dict[str, float] = field(default_factory=dict)
@@ -126,17 +141,80 @@ class Recognizer:
         *,
         announce_unknown: bool = False,
     ) -> Sighting | None:
-        if name and name.strip().lower() not in _IGNORED_NAMES:
-            return self._named(KIND_VEHICLE, track_id, camera, name, score, timestamp, plate)
-        if not plate or not announce_unknown:
-            return None
         track = self._tracks.setdefault(track_id, _Track(camera=camera, is_vehicle=True))
-        if track.announced or not self._cooldown_ok(f"plate:{plate.upper()}"):
+        if track.announced:
             return None
-        track.announced = True
-        return Sighting(
-            KIND_UNKNOWN_VEHICLE, None, score, LEVEL_UNKNOWN, camera, track_id, timestamp, plate
+        if name and name.strip().lower() not in _IGNORED_NAMES:
+            if score >= track.best_score:
+                track.best_name, track.best_score = name.strip(), score
+            level = confidence_level(
+                track.best_score, self.certain_threshold, self.likely_threshold
+            )
+            if level == LEVEL_POSSIBLE:
+                return None
+            candidate = Sighting(
+                KIND_VEHICLE,
+                track.best_name,
+                track.best_score,
+                level,
+                camera,
+                track_id,
+                timestamp,
+                plate,
+            )
+        elif plate and announce_unknown and not track.best_name:
+            candidate = Sighting(
+                KIND_UNKNOWN_VEHICLE, None, score, LEVEL_UNKNOWN, camera, track_id, timestamp, plate
+            )
+        else:
+            return None
+        if not self.vehicles_require_arrival or track.arrived:
+            return self._emit_vehicle(track, candidate)
+        if track.arrived is None and (
+            track.pending is None
+            or candidate.kind == KIND_VEHICLE
+            or track.pending.kind == KIND_UNKNOWN_VEHICLE
+        ):
+            track.pending = candidate  # wait until we see the vehicle move
+        return None
+
+    def vehicle_update(
+        self,
+        track_id: str,
+        camera: str,
+        box: list[float] | tuple[float, ...] | None,
+        stationary: bool,
+    ) -> Sighting | None:
+        """Feed a vehicle's position; returns a held sighting once it is seen arriving.
+
+        A vehicle counts as arriving if it moves before Frigate ever reports it
+        stationary. Cars parked when Frigate starts, and cars that are parked and
+        then drive away, are never announced.
+        """
+        track = self._tracks.setdefault(track_id, _Track(camera=camera, is_vehicle=True))
+        if track.arrived is not None:
+            return None
+        if box is not None and len(box) == 4:
+            current = tuple(float(v) for v in box)
+            if track.first_box is None:
+                track.first_box = current
+            elif _moved(track.first_box, current):
+                track.arrived = True
+        if track.arrived is None and stationary:
+            track.arrived, track.pending = False, None
+            return None
+        if track.arrived and track.pending and not track.announced:
+            return self._emit_vehicle(track, track.pending)
+        return None
+
+    def _emit_vehicle(self, track: _Track, sighting: Sighting) -> Sighting | None:
+        track.announced, track.pending = True, None
+        key = (
+            f"{KIND_VEHICLE}:{sighting.name.lower()}"
+            if sighting.name
+            else f"plate:{(sighting.plate or '').upper()}"
         )
+        return sighting if self._cooldown_ok(key) else None
 
     def unknown_person(self, track_id: str, camera: str, timestamp: float) -> Sighting | None:
         """Called when a person track has gone unidentified for the grace period."""

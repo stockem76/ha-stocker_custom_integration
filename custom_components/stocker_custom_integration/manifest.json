@@ -9,5 +9,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/stockem76/ha-stocker_custom_integration/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }
