@@ -13,7 +13,7 @@ Architecture and roadmap: [docs/DESIGN.md](docs/DESIGN.md).
    - Tapo D235: hardwired, jumper fitted, Always-On mode, plus a camera account set up in the Tapo app.
    - Tapo C500: a camera account set up in the Tapo app.
 3. Train faces in Frigate's **Face Library** and name known plates under `lpr.known_plates`.
-4. **Alexa Media Player** (HACS) for announcements.
+4. Home Assistant's built-in **Alexa Devices** integration, for announcements on Echo devices.
 
 ## Installation
 
@@ -35,7 +35,7 @@ Then go to **Settings → Devices & Services → Add Integration → Stocker Vis
 
 ### Alexa announcements
 
-Import the blueprint [blueprints/automation/stocker_vision/announce_on_alexa.yaml](blueprints/automation/stocker_vision/announce_on_alexa.yaml). Pick your Echo devices, the confidence levels to announce, the cameras, and quiet hours.
+Import the blueprint [blueprints/automation/stocker_vision/announce_on_alexa.yaml](blueprints/automation/stocker_vision/announce_on_alexa.yaml). Pick the Echo "Announce" notify entities from the Alexa Devices integration (e.g. `notify.kitchen_echo_announce`), the confidence levels to announce, the cameras, and quiet hours.
 
 ### Settings
 
