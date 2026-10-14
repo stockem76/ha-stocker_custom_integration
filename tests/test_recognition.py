@@ -22,12 +22,14 @@ class FakeClock:
 
 
 def make(clock: FakeClock | None = None, require_arrival: bool = True):
+    clock = clock or FakeClock()
     return rec.Recognizer(
         certain_threshold=0.9,
         likely_threshold=0.75,
         cooldown=120,
         vehicles_require_arrival=require_arrival,
-        clock=clock or FakeClock(),
+        clock=clock,
+        wall_clock=clock,
     )
 
 
@@ -155,3 +157,55 @@ def test_moved_detects_shift_and_resize():
     assert rec._moved((0, 0, 100, 100), (30, 0, 130, 100))
     assert rec._moved((0, 0, 100, 100), (0, 0, 130, 130))
     assert not rec._moved((0, 0, 100, 100), (5, 5, 105, 105))
+
+
+ELSEWHERE = [300, 120, 520, 260]  # another parked car the tracker can hop to
+
+
+def arrive(r, track, name="Ben's Yaris", plate="LM62NJG", score=0.92, t=1.0):
+    r.vehicle_update(track, "doorbell", PARKED, stationary=False)
+    r.plate(track, "doorbell", name, plate, score, t)
+    return r.vehicle_update(track, "doorbell", APPROACHING, stationary=False)
+
+
+def test_tracker_hopping_between_parked_cars_is_not_an_arrival():
+    """Tonight's case: a parked car re-detected minutes later with a jumpy track."""
+    clock = FakeClock()
+    r = make(clock)
+    assert arrive(r, "v1") is not None  # genuinely arrived earlier
+    r.track_ended("v1")
+    clock.now += 300  # re-detected 5 minutes later, tracker hops to another car
+    r.vehicle_update("v2", "doorbell", PARKED, stationary=False)
+    assert r.plate("v2", "doorbell", "Ben's Yaris", "LM62NJG", 0.90, 2.0) is None
+    assert r.vehicle_update("v2", "doorbell", ELSEWHERE, stationary=False) is None
+
+
+def test_vehicle_returning_after_absence_is_announced():
+    clock = FakeClock()
+    r = make(clock)
+    assert arrive(r, "v1") is not None
+    r.track_ended("v1")
+    clock.now += 3600  # away for an hour
+    assert arrive(r, "v2", t=3.0) is not None
+
+
+def test_vehicle_still_in_view_stays_present():
+    clock = FakeClock()
+    r = make(clock)
+    arrive(r, "v1")
+    for _ in range(4):  # parked and tracked for 40 minutes
+        clock.now += 600
+        r.vehicle_update("v1", "doorbell", APPROACHING, stationary=True)
+    r.track_ended("v1")
+    clock.now += 120
+    assert arrive(r, "v2", t=5.0) is None
+
+
+def test_seen_vehicles_round_trip():
+    clock = FakeClock()
+    r = make(clock)
+    arrive(r, "v1")
+    r2 = make(clock)
+    r2.load_seen_vehicles(r.seen_vehicles())
+    clock.now += 60
+    assert arrive(r2, "v9") is None  # restart does not forget a parked car

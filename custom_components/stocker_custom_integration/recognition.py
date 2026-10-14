@@ -59,6 +59,8 @@ class _Track:
     first_box: tuple[float, float, float, float] | None = None
     arrived: bool | None = None  # None until movement or stationarity is seen
     pending: Sighting | None = None
+    seen_keys: set[str] = field(default_factory=set)
+    recently_present: bool = False  # vehicle was already around before this track
 
 
 def _moved(a: tuple[float, ...], b: tuple[float, ...], fraction: float = 0.2) -> bool:
@@ -69,6 +71,12 @@ def _moved(a: tuple[float, ...], b: tuple[float, ...], fraction: float = 0.2) ->
     dy = (b[1] + b[3]) / 2 - (a[1] + a[3]) / 2
     area_ratio = (bw * bh) / max(aw * ah, 1.0)
     return (dx * dx + dy * dy) ** 0.5 > fraction * size or not 0.7 <= area_ratio <= 1.43
+
+
+def _vehicle_key(sighting: Sighting) -> str:
+    if sighting.name:
+        return f"{KIND_VEHICLE}:{sighting.name.lower()}"
+    return f"plate:{(sighting.plate or '').upper()}"
 
 
 def humanize_camera(camera: str) -> str:
@@ -111,9 +119,34 @@ class Recognizer:
     likely_threshold: float = 0.75
     cooldown: float = 120.0
     vehicles_require_arrival: bool = True
+    vehicle_absence: float = 1800.0  # a vehicle must be unseen this long to "arrive"
     clock: Callable[[], float] = time.monotonic
+    wall_clock: Callable[[], float] = time.time
     _tracks: dict[str, _Track] = field(default_factory=dict)
     _last_announced: dict[str, float] = field(default_factory=dict)
+    _vehicle_seen: dict[str, float] = field(default_factory=dict)
+
+    def seen_vehicles(self) -> dict[str, float]:
+        """Wall-clock last-seen time per vehicle, for persisting across restarts."""
+        return dict(self._vehicle_seen)
+
+    def load_seen_vehicles(self, seen: dict[str, float]) -> None:
+        self._vehicle_seen.update({k: float(v) for k, v in seen.items()})
+
+    def _note_vehicle(self, track: _Track, key: str) -> None:
+        """Record a vehicle sighting; flag the track if the vehicle was already around.
+
+        Frigate's tracker can hop between parked cars, which looks like movement, so
+        a named vehicle seen within ``vehicle_absence`` before this track is treated
+        as still present rather than arriving.
+        """
+        now = self.wall_clock()
+        if key not in track.seen_keys:
+            track.seen_keys.add(key)
+            previous = self._vehicle_seen.get(key)
+            if previous is not None and now - previous < self.vehicle_absence:
+                track.recently_present = True
+        self._vehicle_seen[key] = now
 
     def track_started(self, track_id: str, camera: str, *, vehicle: bool = False) -> None:
         self._tracks.setdefault(track_id, _Track(camera=camera, is_vehicle=vehicle))
@@ -168,6 +201,11 @@ class Recognizer:
             )
         else:
             return None
+        if self.vehicles_require_arrival:
+            self._note_vehicle(track, _vehicle_key(candidate))
+            if track.recently_present:
+                track.announced, track.pending = True, None
+                return None
         if not self.vehicles_require_arrival or track.arrived:
             return self._emit_vehicle(track, candidate)
         if track.arrived is None and (
@@ -192,6 +230,9 @@ class Recognizer:
         then drive away, are never announced.
         """
         track = self._tracks.setdefault(track_id, _Track(camera=camera, is_vehicle=True))
+        now = self.wall_clock()
+        for key in track.seen_keys:  # still in view: keep it "present"
+            self._vehicle_seen[key] = now
         if track.arrived is not None:
             return None
         if box is not None and len(box) == 4:
@@ -209,12 +250,7 @@ class Recognizer:
 
     def _emit_vehicle(self, track: _Track, sighting: Sighting) -> Sighting | None:
         track.announced, track.pending = True, None
-        key = (
-            f"{KIND_VEHICLE}:{sighting.name.lower()}"
-            if sighting.name
-            else f"plate:{(sighting.plate or '').upper()}"
-        )
-        return sighting if self._cooldown_ok(key) else None
+        return sighting if self._cooldown_ok(_vehicle_key(sighting)) else None
 
     def unknown_person(self, track_id: str, camera: str, timestamp: float) -> Sighting | None:
         """Called when a person track has gone unidentified for the grace period."""

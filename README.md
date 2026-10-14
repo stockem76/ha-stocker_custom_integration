@@ -49,7 +49,7 @@ Import the blueprint [blueprints/automation/stocker_vision/announce_on_alexa.yam
 | Announce unknown plates | off | Read out unrecognised registrations |
 | Presence window | 10 min | How long the `*_seen` sensors stay on |
 
-Vehicles are only announced when they **arrive**, meaning Frigate sees them move before they become stationary. Cars already parked when Frigate starts, and cars driving away, are not announced.
+Vehicles are only announced when they **arrive**, meaning Frigate sees them move before they become stationary. Cars already parked when Frigate starts, and cars driving away, are not announced. A named vehicle must also have been unseen for 30 minutes, because Frigate's tracker can hop between parked cars and make them look as if they moved.
 
 ## Privacy
 

@@ -87,6 +87,7 @@ class StockerHub:
     async def async_start(self) -> None:
         data = await self._store.async_load() or {}
         self.subjects = {(s["kind"], s["name"]) for s in data.get("subjects", [])}
+        self.recognizer.load_seen_vehicles(data.get("vehicles_seen", {}))
         self._unsubs.append(
             await mqtt.async_subscribe(
                 self.hass, f"{self._prefix}/tracked_object_update", self._on_object_update
@@ -175,6 +176,7 @@ class StockerHub:
                 )
         elif label in VEHICLE_LABELS:
             self.recognizer.track_started(track_id, camera, vehicle=True)
+            self._store.async_delay_save(self._data_to_save, 60)
             self._publish(
                 self.recognizer.vehicle_update(
                     track_id, camera, after.get("box"), bool(after.get("stationary"))
@@ -239,6 +241,7 @@ class StockerHub:
     def _data_to_save(self) -> dict[str, Any]:
         return {
             "subjects": [{"kind": k, "name": n} for k, n in sorted(self.subjects)],
+            "vehicles_seen": self.recognizer.seen_vehicles(),
         }
 
 
