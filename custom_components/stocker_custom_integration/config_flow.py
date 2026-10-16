@@ -20,6 +20,7 @@ from .const import (
     CONF_COOLDOWN,
     CONF_LIKELY_THRESHOLD,
     CONF_PRESENCE_MINUTES,
+    CONF_QUIET_TIMES,
     CONF_TOPIC_PREFIX,
     CONF_UNKNOWN_CAMERAS,
     CONF_UNKNOWN_DELAY,
@@ -29,11 +30,13 @@ from .const import (
     DEFAULT_LIKELY_THRESHOLD,
     DEFAULT_NAME,
     DEFAULT_PRESENCE_MINUTES,
+    DEFAULT_QUIET_TIMES,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_UNKNOWN_CAMERAS,
     DEFAULT_UNKNOWN_DELAY,
     DOMAIN,
 )
+from .quiet import parse_quiet_times
 
 
 def _score() -> selector.NumberSelector:
@@ -78,10 +81,16 @@ class StockerOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
+        placeholders = {"error": ""}
         if user_input is not None:
+            try:
+                parse_quiet_times(user_input.get(CONF_QUIET_TIMES))
+            except ValueError as err:
+                errors[CONF_QUIET_TIMES] = "invalid_quiet_times"
+                placeholders["error"] = str(err)
             if user_input[CONF_LIKELY_THRESHOLD] > user_input[CONF_CERTAIN_THRESHOLD]:
                 errors["base"] = "thresholds_order"
-            else:
+            if not errors:
                 return self.async_create_entry(data=user_input)
 
         opts = {**self.config_entry.options, **(user_input or {})}
@@ -116,6 +125,15 @@ class StockerOptionsFlow(OptionsFlow):
                     CONF_PRESENCE_MINUTES,
                     default=opts.get(CONF_PRESENCE_MINUTES, DEFAULT_PRESENCE_MINUTES),
                 ): _seconds(240, "min"),
+                vol.Optional(
+                    CONF_QUIET_TIMES,
+                    default=opts.get(CONF_QUIET_TIMES, DEFAULT_QUIET_TIMES),
+                ): str,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )

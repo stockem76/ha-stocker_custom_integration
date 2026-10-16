@@ -14,6 +14,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 from homeassistant.util.json import json_loads
 
 from .const import (
@@ -21,6 +22,7 @@ from .const import (
     CONF_CERTAIN_THRESHOLD,
     CONF_COOLDOWN,
     CONF_LIKELY_THRESHOLD,
+    CONF_QUIET_TIMES,
     CONF_TOPIC_PREFIX,
     CONF_UNKNOWN_CAMERAS,
     CONF_UNKNOWN_DELAY,
@@ -28,6 +30,7 @@ from .const import (
     DEFAULT_CERTAIN_THRESHOLD,
     DEFAULT_COOLDOWN,
     DEFAULT_LIKELY_THRESHOLD,
+    DEFAULT_QUIET_TIMES,
     DEFAULT_TOPIC_PREFIX,
     DEFAULT_UNKNOWN_CAMERAS,
     DEFAULT_UNKNOWN_DELAY,
@@ -38,6 +41,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
+from .quiet import QuietTimes, is_quiet, parse_quiet_times
 from .recognition import (
     KIND_PERSON,
     KIND_UNKNOWN_VEHICLE,
@@ -70,6 +74,13 @@ class StockerHub:
         )
         cameras = opts.get(CONF_UNKNOWN_CAMERAS, DEFAULT_UNKNOWN_CAMERAS)
         self._unknown_cameras = {c.strip() for c in cameras.split(",") if c.strip()}
+        try:
+            self._quiet_times: QuietTimes = parse_quiet_times(
+                opts.get(CONF_QUIET_TIMES, DEFAULT_QUIET_TIMES)
+            )
+        except ValueError as err:
+            _LOGGER.warning("Ignoring invalid camera quiet times: %s", err)
+            self._quiet_times = {}
         self.recognizer = Recognizer(
             certain_threshold=opts.get(CONF_CERTAIN_THRESHOLD, DEFAULT_CERTAIN_THRESHOLD),
             likely_threshold=opts.get(CONF_LIKELY_THRESHOLD, DEFAULT_LIKELY_THRESHOLD),
@@ -233,9 +244,10 @@ class StockerHub:
         async_dispatcher_send(
             self.hass, signal(SIGNAL_SIGHTING, self.entry.entry_id), sighting, message
         )
+        quiet = is_quiet(self._quiet_times, sighting.camera, dt_util.now().time())
         self.hass.bus.async_fire(
             EVENT_VEHICLE if is_vehicle else EVENT_VISITOR,
-            {**asdict(sighting), "message": message, "subject": sighting.subject},
+            {**asdict(sighting), "message": message, "subject": sighting.subject, "quiet": quiet},
         )
 
     def _data_to_save(self) -> dict[str, Any]:

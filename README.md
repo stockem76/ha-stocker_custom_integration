@@ -30,7 +30,7 @@ Then go to **Settings → Devices & Services → Add Integration → Stocker Vis
 | `sensor.stocker_vision_last_visitor` | Name or "Unknown". Attributes: confidence, level, camera, message |
 | `sensor.stocker_vision_last_vehicle` | Vehicle name or plate |
 | `binary_sensor.stocker_vision_<name>_seen` | Created automatically for each recognised person or vehicle. On for the presence window. |
-| Event `stocker_vision_visitor` | `kind`, `name`, `confidence`, `level` (certain/likely/unknown), `camera`, `message` |
+| Event `stocker_vision_visitor` | `kind`, `name`, `confidence`, `level` (certain/likely/unknown), `camera`, `message`, `quiet` |
 | Event `stocker_vision_vehicle` | The same, plus `plate` |
 
 ### Alexa announcements
@@ -48,6 +48,7 @@ Import the blueprint [blueprints/automation/stocker_vision/announce_on_alexa.yam
 | Unknown cameras | all | Limit unknown-person announcements, e.g. `front_door` |
 | Announce unknown plates | off | Read out unrecognised registrations |
 | Presence window | 10 min | How long the `*_seen` sensors stay on |
+| Camera quiet times | none | Per-camera times with no announcements, e.g. `Garden=22:00-07:00; doorbell=23:30-06:30` (several windows with commas, `*` for all cameras). Sightings still update sensors; events carry `quiet: true` and the blueprint skips them. |
 
 Vehicles are only announced when they **arrive**, meaning Frigate sees them move before they become stationary. Cars already parked when Frigate starts, and cars driving away, are not announced. A named vehicle must also have been unseen for 30 minutes, because Frigate's tracker can hop between parked cars and make them look as if they moved.
 

@@ -62,6 +62,8 @@ condition:
   - condition: template
     value_template: "{{ trigger.event.data.level in levels }}"
   - condition: template
+    value_template: "{{ not trigger.event.data.get('quiet', false) }}"
+  - condition: template
     value_template: "{{ cameras | length == 0 or trigger.event.data.camera in cameras }}"
   - condition: not
     conditions:

@@ -24,12 +24,17 @@
           "unknown_delay": "Wait this long for a face before announcing an unknown person",
           "unknown_cameras": "Cameras that announce unknown people (comma separated Frigate names, blank = all)",
           "announce_unknown_vehicles": "Announce unrecognised number plates",
-          "presence_minutes": "Keep \"seen\" sensors on for"
+          "presence_minutes": "Keep \"seen\" sensors on for",
+          "quiet_times": "Camera quiet times"
+        },
+        "data_description": {
+          "quiet_times": "No announcements from these cameras at these times, e.g. Garden=22:00-07:00; doorbell=23:30-06:30. Several windows: Garden=12:00-13:00,22:00-07:00. Use * for all cameras. Sightings are still recorded."
         }
       }
     },
     "error": {
-      "thresholds_order": "The likely threshold must not be higher than the certain threshold."
+      "thresholds_order": "The likely threshold must not be higher than the certain threshold.",
+      "invalid_quiet_times": "Invalid quiet times: {error}"
     }
   },
   "entity": {

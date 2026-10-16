@@ -25,3 +25,33 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {CONF_TOPIC_PREFIX: "frigate"}
+
+
+async def test_options_flow_validates_quiet_times(hass: HomeAssistant) -> None:
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_TOPIC_PREFIX: "frigate"})
+    entry.add_to_hass(hass)
+
+    base = {
+        "certain_threshold": 0.9,
+        "likely_threshold": 0.75,
+        "cooldown": 120,
+        "unknown_delay": 6,
+        "unknown_cameras": "",
+        "announce_unknown_vehicles": False,
+        "presence_minutes": 10,
+    }
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**base, "quiet_times": "Garden=22-07"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"quiet_times": "invalid_quiet_times"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**base, "quiet_times": "Garden=22:00-07:00; doorbell=23:30-06:30"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["quiet_times"] == "Garden=22:00-07:00; doorbell=23:30-06:30"
